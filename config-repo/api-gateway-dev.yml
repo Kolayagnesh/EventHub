@@ -1,0 +1,39 @@
+server:
+  port: 8080
+
+spring:
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        - id: auth-service-route
+          uri: lb://AUTH-SERVICE
+          predicates:
+            - Path=/api/v1/auth/**
+
+        - id: user-service-route
+          uri: lb://USER-SERVICE
+          predicates:
+            - Path=/api/v1/users/**
+          filters:
+            - AuthenticationFilter
+
+        - id: event-service-route
+          uri: lb://EVENT-SERVICE
+          predicates:
+            - Path=/api/v1/events/**
+          filters:
+            - AuthenticationFilter
+
+        - id: booking-service-route
+          uri: lb://BOOKING-SERVICE
+          predicates:
+            - Path=/api/v1/bookings/**
+          filters:
+            - AuthenticationFilter
+
+jwt:
+  secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970

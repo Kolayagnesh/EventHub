@@ -1,9 +1,9 @@
 server:
-  port: 8081
+  port: 8083
 
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/auth_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    url: jdbc:mysql://localhost:3306/event_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: eventhub_admin
     password: eventhub_password
     driver-class-name: com.mysql.cj.jdbc.Driver

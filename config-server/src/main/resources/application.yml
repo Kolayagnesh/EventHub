@@ -10,7 +10,7 @@ spring:
     config:
       server:
         native:
-          search-locations: file:///C:/Proj/eventhub/config-repo/
+          search-locations: file:///C:/Proj/eventhub/config-repo
 
 eureka:
   client:

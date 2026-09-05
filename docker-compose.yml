@@ -2,24 +2,27 @@ version: '3.8'
 
 services:
   # -----------------------------------------------------------
-  # PostgreSQL: Databases for Auth, Event, Booking, Payment, etc.
+  # MySQL: Replaces PostgreSQL on default port 3306
   # -----------------------------------------------------------
-  postgres:
-    image: postgres:16-alpine
-    container_name: eventhub-postgres
+  mysql:
+    image: mysql:8.0
+    container_name: eventhub-mysql
+    restart: always
     environment:
-      POSTGRES_USER: eventhub_admin
-      POSTGRES_PASSWORD: eventhub_password
-      POSTGRES_DB: eventhub_db
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: eventhub_db
+      MYSQL_USER: eventhub_admin
+      MYSQL_PASSWORD: eventhub_password
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
+      - ./docker-init/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - eventhub-network
 
   # -----------------------------------------------------------
-  # Redis: Distributed Seat Locking (5-minute TTL locks)
+  # Redis: Distributed Seat Locking
   # -----------------------------------------------------------
   redis:
     image: redis:7-alpine
@@ -32,7 +35,7 @@ services:
       - eventhub-network
 
   # -----------------------------------------------------------
-  # Apache Kafka: Event Streaming (KRaft mode - no Zookeeper needed)
+  # Apache Kafka: Event Streaming (KRaft mode)
   # -----------------------------------------------------------
   kafka:
     image: confluentinc/cp-kafka:7.5.0
@@ -64,6 +67,6 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
+  mysql_data:
   redis_data:
   kafka_data:
