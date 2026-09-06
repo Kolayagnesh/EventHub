@@ -6,11 +6,14 @@ import com.eventhub.bookingservice.dto.EventSeatDto;
 import com.eventhub.bookingservice.entity.Booking;
 import com.eventhub.bookingservice.entity.BookingItem;
 import com.eventhub.bookingservice.entity.BookingStatus;
+import com.eventhub.bookingservice.event.BookingCreatedEvent;
 import com.eventhub.bookingservice.repository.BookingRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -26,6 +29,7 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final SeatLockService seatLockService;
     private final EventServiceClient eventServiceClient;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     @Transactional
     public Booking createPendingBooking(Long userId, CreateBookingRequest request) {
@@ -74,8 +78,18 @@ public class BookingService {
 
         booking.setItems(items);
         Booking savedBooking = bookingRepository.save(booking);
-
         log.info("Created PENDING booking {} for user {} with total amount {}", savedBooking.getId(), userId, totalAmount);
+        BookingCreatedEvent event = BookingCreatedEvent.builder()
+                .bookingId(savedBooking.getId())
+                .userId(savedBooking.getUserId())
+                .eventId(savedBooking.getEventId())
+                .totalAmount(savedBooking.getTotalAmount())
+                .seatIds(request.getSeatIds())
+                .build();
+
+        kafkaTemplate.send("booking-created", String.valueOf(savedBooking.getId()), event);
+        log.info("Published BookingCreatedEvent to Kafka for booking ID: {}", savedBooking.getId());
+
         return savedBooking;
     }
 
@@ -86,5 +100,26 @@ public class BookingService {
 
     public List<Booking> getUserBookings(Long userId) {
         return bookingRepository.findByUserId(userId);
+    }
+
+    @Transactional
+    public void confirmBooking(Long bookingId) {
+        bookingRepository.findById(bookingId).ifPresent(booking -> {
+            booking.setStatus(BookingStatus.CONFIRMED);
+            bookingRepository.save(booking);
+            log.info("Booking ID {} updated to CONFIRMED", bookingId);
+        });
+    }
+
+    @Transactional
+    public void cancelBookingAndReleaseSeats(Long bookingId, Long eventId, List<Long> seatIds) {
+        bookingRepository.findById(bookingId).ifPresent(booking -> {
+            booking.setStatus(BookingStatus.CANCELLED);
+            bookingRepository.save(booking);
+
+            // Release Redis locks so seats are immediately available to other users
+            seatLockService.releaseLocks(eventId, seatIds);
+            log.warn("Saga Compensation: Booking ID {} marked CANCELLED and Redis seat locks released", bookingId);
+        });
     }
 }
