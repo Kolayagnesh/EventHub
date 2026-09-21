@@ -4,6 +4,23 @@ server:
 spring:
   cloud:
     gateway:
+      # Centralized CORS Configuration
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:3000"
+              - "http://localhost:5173"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders:
+              - "*"
+            allowCredentials: true
+            maxAge: 3600
       discovery:
         locator:
           enabled: true
@@ -32,6 +49,18 @@ spring:
           uri: lb://BOOKING-SERVICE
           predicates:
             - Path=/api/v1/bookings/**
+          filters:
+            - AuthenticationFilter
+
+        - id: payment-service-route
+          uri: lb://PAYMENT-SERVICE
+          predicates:
+            - Path=/api/v1/payments/**
+
+        - id: ticket-service-route
+          uri: lb://TICKET-SERVICE
+          predicates:
+            - Path=/api/v1/tickets/**
           filters:
             - AuthenticationFilter
 

@@ -36,4 +36,11 @@ public class UserCredential {
     @Column(name = "is_verified", nullable = false)
     @Builder.Default
     private Boolean isVerified = false;
+
+    @PrePersist
+    public void prePersist() {
+        if (this.isVerified == null) {
+            this.isVerified = false;
+        }
+    }
 }

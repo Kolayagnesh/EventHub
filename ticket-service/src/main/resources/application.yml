@@ -1,11 +1,12 @@
 spring:
   application:
     name: ticket-service
-  profiles:
-    active: dev
   config:
     import: "optional:configserver:http://localhost:8888"
-
-eureka:
-  instance:
-    prefer-ip-address: true
+  profiles:
+    active: dev
+  kafka:
+    consumer:
+      group-id: ticket-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer

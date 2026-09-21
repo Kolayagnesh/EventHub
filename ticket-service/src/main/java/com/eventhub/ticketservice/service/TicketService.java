@@ -30,21 +30,24 @@ public class TicketService {
 
     @Transactional
     public void generateTicketsForBooking(PaymentCompletedEvent event) {
-        // Idempotency: skip if already generated for this booking
+        // 1. Check idempotency: avoid generating duplicate passes on re-delivery
         List<Ticket> existing = ticketRepository.findByBookingId(event.getBookingId());
         if (!existing.isEmpty()) {
             log.warn("Tickets already exist for booking ID: {}", event.getBookingId());
             return;
         }
 
-        List<Ticket> generatedTickets = new ArrayList<>();
         List<Long> seatIds = (event.getSeatIds() != null && !event.getSeatIds().isEmpty())
                 ? event.getSeatIds()
                 : List.of(0L);
 
+        List<Ticket> generatedTickets = new ArrayList<>();
+
+        // 2. Generate unique ticket records and Base64 QR code data URIs
         for (Long seatId : seatIds) {
             String ticketCode = "TICK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-            String qrPayload = String.format("eventhub://ticket/%s?event=%d&seat=%d", ticketCode, event.getEventId(), seatId);
+            String qrPayload = String.format("eventhub://ticket/%s?booking=%d&event=%d&seat=%d",
+                    ticketCode, event.getBookingId(), event.getEventId(), seatId);
             String qrBase64 = qrCodeService.generateQRCodeImageBase64(qrPayload);
 
             Ticket ticket = Ticket.builder()
@@ -62,17 +65,20 @@ public class TicketService {
         }
 
         List<Ticket> savedTickets = ticketRepository.saveAll(generatedTickets);
-        log.info("Generated {} ticket(s) for booking ID: {}", savedTickets.size(), event.getBookingId());
+        log.info("Persisted {} ticket(s) in MySQL for booking ID: {}", savedTickets.size(), event.getBookingId());
 
-        TicketGeneratedEvent ticketGeneratedEvent = TicketGeneratedEvent.builder()
+        // 3. Emit ticket-generated event to Kafka carrying userEmail to notification-service
+        TicketGeneratedEvent ticketEvent = TicketGeneratedEvent.builder()
                 .bookingId(event.getBookingId())
-                .userId(event.getUserId() != null ? event.getUserId() : 1L)
-                .eventId(event.getEventId() != null ? event.getEventId() : 1L)
+                .userId(event.getUserId())
+                .userEmail(event.getUserEmail()) // Carried forward
+                .eventId(event.getEventId())
                 .ticketIds(savedTickets.stream().map(Ticket::getId).toList())
                 .ticketCodes(savedTickets.stream().map(Ticket::getTicketCode).toList())
                 .build();
 
-        kafkaTemplate.send("ticket-generated", String.valueOf(event.getBookingId()), ticketGeneratedEvent);
+        kafkaTemplate.send("ticket-generated", String.valueOf(event.getBookingId()), ticketEvent);
+        log.info("Dispatched ticket-generated event to Kafka for booking ID: {}", event.getBookingId());
     }
 
     @Transactional

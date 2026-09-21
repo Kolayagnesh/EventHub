@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
 @Table(name = "payments")
@@ -23,6 +24,13 @@ public class Payment {
     @Column(nullable = false)
     private Long userId;
 
+    @Column(nullable = true)
+    private Long eventId;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "payment_seats", joinColumns = @JoinColumn(name = "payment_id"))
+    @Column(name = "seat_id")
+    private List<Long> seatIds;
     @Column(nullable = false)
     private BigDecimal amount;
 

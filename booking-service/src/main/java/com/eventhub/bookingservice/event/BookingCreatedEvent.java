@@ -15,6 +15,7 @@ import java.util.List;
 public class BookingCreatedEvent {
     private Long bookingId;
     private Long userId;
+    private String userEmail;
     private Long eventId;
     private BigDecimal totalAmount;
     private List<Long> seatIds;

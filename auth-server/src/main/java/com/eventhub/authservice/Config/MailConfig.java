@@ -1,4 +1,4 @@
-package com.eventhub.authservice.config;
+package com.eventhub.authservice.Config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;

@@ -8,9 +8,11 @@ import org.springframework.kafka.config.TopicBuilder;
 @Configuration
 public class KafkaTicketConfig {
 
+    public static final String TICKET_GENERATED_TOPIC = "ticket-generated";
+
     @Bean
     public NewTopic ticketGeneratedTopic() {
-        return TopicBuilder.name("ticket-generated")
+        return TopicBuilder.name(TICKET_GENERATED_TOPIC)
                 .partitions(3)
                 .replicas(1)
                 .build();

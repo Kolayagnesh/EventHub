@@ -15,7 +15,7 @@ public class TicketKafkaConsumer {
     private final TicketService ticketService;
 
     @KafkaListener(topics = "payment-completed", groupId = "ticket-group")
-    public void consumePaymentCompleted(PaymentCompletedEvent event) {
+    public void handlePaymentCompleted(PaymentCompletedEvent event) {
         log.info("Ticket Service consumed payment-completed for booking ID: {}", event.getBookingId());
         ticketService.generateTicketsForBooking(event);
     }

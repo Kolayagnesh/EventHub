@@ -33,8 +33,8 @@ public class Ticket {
     @Column(nullable = false, unique = true)
     private String ticketCode;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
-    private String qrCodeData; // Base64 Data URI string of the generated QR
+    @Column(nullable = false, columnDefinition = "LONGTEXT")
+    private String qrCodeData; // Base64 data URI
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

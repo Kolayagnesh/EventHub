@@ -30,6 +30,10 @@ public class AuthController {
         return ResponseEntity.ok(authService.verifyOtpAndAuthenticate(request));
     }
 
+    @GetMapping("/internal/{userId}/email")
+    public ResponseEntity<String> getUserEmailById(@PathVariable("userId") Long userId) {
+        return ResponseEntity.ok(authService.extractEmail(userId));
+    }
     // Login endpoint
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody AuthRequest request) {

@@ -12,5 +12,5 @@ public class EventSeatDto {
     private Integer seatNumber;
     private String fullSeatCode;
     private BigDecimal price;
-    private String status;
+    private String status; // "AVAILABLE", "LOCKED", "BOOKED"
 }

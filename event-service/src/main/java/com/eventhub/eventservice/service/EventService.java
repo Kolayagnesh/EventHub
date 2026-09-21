@@ -5,6 +5,7 @@ import com.eventhub.eventservice.dto.CreateVenueRequest;
 import com.eventhub.eventservice.entity.*;
 import com.eventhub.eventservice.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,7 +21,47 @@ public class EventService {
     private final VenueRepository venueRepository;
     private final VenueSectionRepository venueSectionRepository;
     private final EventSeatRepository eventSeatRepository;
+    private final StringRedisTemplate redisTemplate;
 
+    /**
+     * Reconciles DB status with real-time Redis distributed locks
+     */
+    public List<EventSeat> getSeatsForEvent(Long eventId) {
+        List<EventSeat> seats = eventSeatRepository.findByEventId(eventId);
+
+        for (EventSeat seat : seats) {
+            // If already permanently BOOKED in MySQL, keep it BOOKED
+            if (seat.getStatus() == SeatStatus.BOOKED) {
+                continue;
+            }
+
+            // Check if there is an active lock in Redis
+            String lockKey = "lock:event:" + eventId + ":seat:" + seat.getId();
+            Boolean isLocked = redisTemplate.hasKey(lockKey);
+
+            if (Boolean.TRUE.equals(isLocked)) {
+                seat.setStatus(SeatStatus.LOCKED);
+            } else {
+                seat.setStatus(SeatStatus.AVAILABLE);
+            }
+        }
+
+        return seats;
+    }
+
+    /**
+     * Called by Booking Service when payment confirms
+     */
+    @Transactional
+    public void updateSeatsStatus(Long eventId, List<Long> seatIds, SeatStatus status) {
+        List<EventSeat> seats = eventSeatRepository.findAllById(seatIds);
+        for (EventSeat seat : seats) {
+            if (seat.getEventId().equals(eventId)) {
+                seat.setStatus(status);
+            }
+        }
+        eventSeatRepository.saveAll(seats);
+    }
     @Transactional
     public Venue createVenue(CreateVenueRequest request) {
         Venue venue = Venue.builder()
@@ -100,9 +141,6 @@ public class EventService {
         return savedEvent;
     }
 
-    public List<EventSeat> getSeatsForEvent(Long eventId) {
-        return eventSeatRepository.findByEventId(eventId);
-    }
 
     public List<EventSeat> getAvailableSeatsForEvent(Long eventId) {
         return eventSeatRepository.findByEventIdAndStatus(eventId, SeatStatus.AVAILABLE);

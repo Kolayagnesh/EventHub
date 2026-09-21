@@ -24,7 +24,9 @@ public class UserController {
     @PostMapping("/profile")
     public ResponseEntity<User> saveMyProfile(
             @RequestHeader("X-User-Id") Long authUserId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @Valid @RequestBody UserProfileRequest request) {
+
         return ResponseEntity.ok(userService.createOrUpdateProfile(authUserId, request));
     }
 }

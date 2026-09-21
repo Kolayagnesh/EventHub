@@ -1,6 +1,6 @@
 package com.eventhub.authservice.Repository;
 
-import com.eventhub.authservice.entity.UserCredential;
+import com.eventhub.authservice.Entity.UserCredential;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

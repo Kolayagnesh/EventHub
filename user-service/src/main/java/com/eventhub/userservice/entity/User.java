@@ -25,6 +25,8 @@ public class User {
     @Column(nullable = false, unique = true)
     private Long authUserId;
 
+
+
     @Column(nullable = false)
     private String firstName;
 

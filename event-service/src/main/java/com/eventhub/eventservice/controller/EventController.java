@@ -4,6 +4,7 @@ import com.eventhub.eventservice.dto.CreateEventRequest;
 import com.eventhub.eventservice.dto.CreateVenueRequest;
 import com.eventhub.eventservice.entity.Event;
 import com.eventhub.eventservice.entity.EventSeat;
+import com.eventhub.eventservice.entity.SeatStatus;
 import com.eventhub.eventservice.entity.Venue;
 import com.eventhub.eventservice.service.EventService;
 import jakarta.validation.Valid;
@@ -21,7 +22,7 @@ public class EventController {
 
     private final EventService eventService;
 
-    // --- VENUE TEMPLATES ---
+    // --- VENUE BLUEPRINTS ---
     @PostMapping("/venues")
     public ResponseEntity<Venue> createVenue(@Valid @RequestBody CreateVenueRequest request) {
         return new ResponseEntity<>(eventService.createVenue(request), HttpStatus.CREATED);
@@ -49,13 +50,23 @@ public class EventController {
     }
 
     // --- BOOKABLE SEATS ---
-    @GetMapping("/{id}/seats")
-    public ResponseEntity<List<EventSeat>> getSeats(@PathVariable Long id) {
-        return ResponseEntity.ok(eventService.getSeatsForEvent(id));
+    @GetMapping("/{eventId}/seats")
+    public ResponseEntity<List<EventSeat>> getSeatsForEvent(@PathVariable Long eventId) {
+        return ResponseEntity.ok(eventService.getSeatsForEvent(eventId));
     }
 
-    @GetMapping("/{id}/seats/available")
-    public ResponseEntity<List<EventSeat>> getAvailableSeats(@PathVariable Long id) {
-        return ResponseEntity.ok(eventService.getAvailableSeatsForEvent(id));
+    @GetMapping("/{eventId}/seats/available")
+    public ResponseEntity<List<EventSeat>> getAvailableSeats(@PathVariable Long eventId) {
+        return ResponseEntity.ok(eventService.getAvailableSeatsForEvent(eventId));
+    }
+
+    @PutMapping("/{eventId}/seats/status")
+    public ResponseEntity<Void> updateSeatsStatus(
+            @PathVariable Long eventId,
+            @RequestBody List<Long> seatIds,
+            @RequestParam("status") SeatStatus status
+    ) {
+        eventService.updateSeatsStatus(eventId, seatIds, status);
+        return ResponseEntity.ok().build();
     }
 }

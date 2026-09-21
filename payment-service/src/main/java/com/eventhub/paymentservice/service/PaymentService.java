@@ -1,5 +1,7 @@
 package com.eventhub.paymentservice.service;
 
+import com.eventhub.paymentservice.client.BookingServiceClient;
+import com.eventhub.paymentservice.dto.BookingResponseDto;
 import com.eventhub.paymentservice.event.BookingCreatedEvent;
 import com.eventhub.paymentservice.event.PaymentCompletedEvent;
 import com.eventhub.paymentservice.event.PaymentFailedEvent;
@@ -18,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -28,7 +31,7 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final RazorpayClient razorpayClient;
-
+    private final BookingServiceClient bookingServiceClient;
     @Value("${razorpay.key-secret}")
     private String keySecret;
 
@@ -42,7 +45,6 @@ public class PaymentService {
         }
 
         try {
-            // Razorpay calculates currency in paise (1 INR = 100 paise)
             long amountInPaise = event.getTotalAmount().multiply(BigDecimal.valueOf(100)).longValue();
 
             JSONObject orderRequest = new JSONObject();
@@ -79,11 +81,22 @@ public class PaymentService {
         Payment payment = paymentRepository.findByBookingId(bookingId)
                 .orElseThrow(() -> new RuntimeException("Payment record not found for booking: " + bookingId));
 
+        // 1. Fetch eventId and seatIds from booking-service via Feign
+        BookingResponseDto booking = bookingServiceClient.getBookingById(bookingId);
+        Long eventId = booking.getEventId();
+        List<Long> seatIds = (booking.getItems() != null)
+                ? booking.getItems().stream().map(BookingResponseDto.BookingItemDto::getEventSeatId).toList()
+                : Collections.emptyList();
+
+        if (razorpayOrderId == null || razorpayPaymentId == null || razorpaySignature == null || razorpaySignature.isBlank()) {
+            return handlePaymentFailure(payment, eventId, seatIds, "Missing Razorpay verification parameters");
+        }
+
         try {
             JSONObject options = new JSONObject();
-            options.put("razorpay_order_id", razorpayOrderId);
-            options.put("razorpay_payment_id", razorpayPaymentId);
-            options.put("razorpay_signature", razorpaySignature);
+            options.put("razorpay_order_id", razorpayOrderId.trim());
+            options.put("razorpay_payment_id", razorpayPaymentId.trim());
+            options.put("razorpay_signature", razorpaySignature.trim());
 
             boolean isValidSignature = Utils.verifyPaymentSignature(options, keySecret);
 
@@ -93,29 +106,28 @@ public class PaymentService {
                 payment.setRazorpaySignature(razorpaySignature);
                 paymentRepository.save(payment);
 
-                // Publish 'payment-completed' to Kafka -> Confirms booking & triggers ticket service
                 PaymentCompletedEvent event = PaymentCompletedEvent.builder()
                         .bookingId(payment.getBookingId())
                         .paymentId(payment.getId())
+                        .userId(payment.getUserId())
+                        .eventId(eventId)
+                        .seatIds(seatIds)
                         .amount(payment.getAmount())
                         .transactionId(razorpayPaymentId)
                         .build();
 
                 kafkaTemplate.send("payment-completed", String.valueOf(payment.getBookingId()), event);
-                log.info("Payment signature verified. Emitted 'payment-completed' for booking: {}", bookingId);
+                log.info("Emitted 'payment-completed' for booking: {}", bookingId);
             } else {
-                handlePaymentFailure(payment, null, null, "Signature verification failed");
+                handlePaymentFailure(payment, eventId, seatIds, "Signature verification failed");
             }
         } catch (Exception e) {
-            handlePaymentFailure(payment, null, null, "Verification error: " + e.getMessage());
+            handlePaymentFailure(payment, eventId, seatIds, "Verification error: " + e.getMessage());
         }
 
         return payment;
     }
 
-    /**
-     * 3. Handles user cancellation / payment failure and triggers Saga rollback
-     */
     @Transactional
     public Payment handlePaymentFailure(Payment payment, Long eventId, List<Long> seatIds, String reason) {
         payment.setStatus(PaymentStatus.FAILED);
@@ -125,13 +137,13 @@ public class PaymentService {
         PaymentFailedEvent event = PaymentFailedEvent.builder()
                 .bookingId(payment.getBookingId())
                 .eventId(eventId)
+                .userId(payment.getUserId())
                 .seatIds(seatIds)
                 .reason(reason)
                 .build();
 
-        // Publish 'payment-failed' to Kafka -> Booking Service releases Redis seat locks
         kafkaTemplate.send("payment-failed", String.valueOf(payment.getBookingId()), event);
-        log.warn("Payment failed for booking {}. Emitted 'payment-failed'. Reason: {}", payment.getBookingId(), reason);
+        log.warn("Emitted 'payment-failed' for booking: {}", payment.getBookingId());
         return payment;
     }
 

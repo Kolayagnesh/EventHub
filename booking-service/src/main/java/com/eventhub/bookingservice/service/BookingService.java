@@ -14,7 +14,6 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -79,12 +78,15 @@ public class BookingService {
         booking.setItems(items);
         Booking savedBooking = bookingRepository.save(booking);
         log.info("Created PENDING booking {} for user {} with total amount {}", savedBooking.getId(), userId, totalAmount);
+
+        // 5. Emit BookingCreatedEvent carrying userEmail downstream to Kafka
         BookingCreatedEvent event = BookingCreatedEvent.builder()
                 .bookingId(savedBooking.getId())
                 .userId(savedBooking.getUserId())
+                .userEmail(request.getUserEmail()) // Populated from CreateBookingRequest
                 .eventId(savedBooking.getEventId())
-                .totalAmount(savedBooking.getTotalAmount())
                 .seatIds(request.getSeatIds())
+                .totalAmount(savedBooking.getTotalAmount())
                 .build();
 
         kafkaTemplate.send("booking-created", String.valueOf(savedBooking.getId()), event);
@@ -102,22 +104,43 @@ public class BookingService {
         return bookingRepository.findByUserId(userId);
     }
 
+    /**
+     * Saga Step: Marks booking as CONFIRMED, releases Redis hold locks,
+     * and permanently marks the seats as BOOKED in Event Service.
+     */
     @Transactional
     public void confirmBooking(Long bookingId) {
         bookingRepository.findById(bookingId).ifPresent(booking -> {
             booking.setStatus(BookingStatus.CONFIRMED);
             bookingRepository.save(booking);
             log.info("Booking ID {} updated to CONFIRMED", bookingId);
+
+            List<Long> seatIds = booking.getItems().stream()
+                    .map(BookingItem::getEventSeatId)
+                    .toList();
+
+            // Release temporary Redis locks
+            seatLockService.releaseLocks(booking.getEventId(), seatIds);
+
+            // Mark seats permanently BOOKED in Event Service via Feign
+            try {
+                eventServiceClient.updateSeatsStatus(booking.getEventId(), seatIds, "BOOKED");
+                log.info("Permanently updated seats {} to BOOKED for event {}", seatIds, booking.getEventId());
+            } catch (Exception e) {
+                log.warn("Could not synchronize permanent seat status with Event Service: {}", e.getMessage());
+            }
         });
     }
 
+    /**
+     * Saga Compensation: Marks booking as CANCELLED and releases Redis seat locks.
+     */
     @Transactional
     public void cancelBookingAndReleaseSeats(Long bookingId, Long eventId, List<Long> seatIds) {
         bookingRepository.findById(bookingId).ifPresent(booking -> {
             booking.setStatus(BookingStatus.CANCELLED);
             bookingRepository.save(booking);
 
-            // Release Redis locks so seats are immediately available to other users
             seatLockService.releaseLocks(eventId, seatIds);
             log.warn("Saga Compensation: Booking ID {} marked CANCELLED and Redis seat locks released", bookingId);
         });
